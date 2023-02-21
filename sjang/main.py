@@ -17,9 +17,6 @@ from sklearn.model_selection import train_test_split
    
 orig_train_df = pd.read_csv("data/new_train.csv")
 
-medical_specialty_binary_df = pd.get_dummies(orig_train_df.medical_specialty)
-orig_train_df = pd.concat([orig_train_df, medical_specialty_binary_df], axis=1)
-
 target_list = [' Emergency Room Reports', ' Surgery', ' Radiology', ' Podiatry',
        ' Neurology', ' Gastroenterology', ' Orthopedic',
        ' Cardiovascular / Pulmonary', ' Nephrology',
@@ -67,16 +64,31 @@ class CustomDataset(torch.utils.data.Dataset):
             'targets': torch.FloatTensor(self.targets[index])
         }
 
-# class_weights = class_weight.compute_class_weight(class_weight='balanced',  classes=np.unique(target_list), y=orig_train_df.medical_specialty)
-# weights= torch.tensor(class_weights,dtype=torch.float)
 
-train_size = 0.8
-train_df = orig_train_df.sample(frac=train_size, random_state=200)
-train_df.drop(labels=['Unnamed: 0', 'labels', 'medical_specialty'], axis=1, inplace=True)
-val_df = orig_train_df.drop(train_df.index).reset_index(drop=True)
+X, y = orig_train_df.transcription, orig_train_df.medical_specialty
+X_train, X_val, y_train, y_val = train_test_split(X, y, stratify=y, test_size=0.2, random_state=200)
+train_df = pd.concat([X_train, y_train], axis=1)
+val_df = pd.concat([X_val, y_val], axis=1)
+
+train_medical_df = pd.get_dummies(train_df.medical_specialty)
+val_medical_df = pd.get_dummies(val_df.medical_specialty)
+
+train_df = pd.concat([train_df, train_medical_df], axis=1)
+val_df = pd.concat([val_df, val_medical_df], axis=1)
+
+class_weights = class_weight.compute_class_weight(class_weight='balanced',  classes=np.unique(target_list), y=train_df.medical_specialty)
+weights= torch.tensor(class_weights,dtype=torch.float)
+
+# train_size = 0.8
+# train_df = orig_train_df.sample(frac=train_size, random_state=200)
+train_df.drop(labels=['medical_specialty'], axis=1, inplace=True)
+val_df.drop(labels=['medical_specialty'], axis=1, inplace=True)
+
+# val_df = orig_train_df.drop(train_df.index).reset_index(drop=True)
 train_df = train_df.reset_index(drop=True)
+val_df = val_df.reset_index(drop=True)
 
-train_dataset =CustomDataset(train_df, tokenizer, MAX_LEN)
+train_dataset = CustomDataset(train_df, tokenizer, MAX_LEN)
 val_dataset = CustomDataset(val_df, tokenizer, MAX_LEN)
 
 train_data_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size =TRAIN_BATCH_SIZE, num_workers = 0)
@@ -89,7 +101,7 @@ else:
     device = torch.device("cpu")
     print('CPU exists.')
 
-#weights = weights.to(device)
+weights = weights.to(device)
 
 def load_ckp(checkpoint_fpath, model, optimizer):
     """
@@ -145,7 +157,7 @@ model = BERTClass()
 model.to(device)
 
 def loss_fn(outputs, targets):
-    return torch.nn.BCEWithLogitsLoss()(outputs, targets)
+    return torch.nn.BCEWithLogitsLoss(weight=weights)(outputs, targets)
 
 optimizer = torch.optim.Adam(params =  model.parameters(), lr=LEARNING_RATE)
 
@@ -246,14 +258,14 @@ def train_model(n_epochs, training_loader, validation_loader, model,
 
   return model
 
-ckpt_path = "data/multi-label/curr_ckpt7"
-model_path = "data/multi-label/best_model7.pt"
+ckpt_path = "data/multi-label/curr_ckpt_class_weights"
+model_path = "data/multi-label/best_model_class_weights.pt"
 trained_model = train_model(EPOCHS, train_data_loader, val_data_loader, model, optimizer, ckpt_path, model_path)
 
 best_model_path = 'data/multi-label/best_model1.pt'
 best_checkpoint_path = "data/multi-label/curr_ckpt1"
 
-model.load_state_dict(torch.load(best_checkpoint_path)['state_dict'])
+model.load_state_dict(torch.load(ckpt_path)['state_dict'])
 model.eval()
 
 TEST_BATCH_SIZE = 32
@@ -263,9 +275,7 @@ test_df = pd.concat([test_df, medical_specialty_df])
 test_df.drop('Unnamed: 0', axis=1, inplace=True)
 test_df = test_df.fillna(0)
 test_dataset = CustomDataset(test_df, tokenizer, MAX_LEN)
-
 test_data_loader = torch.utils.data.DataLoader(test_dataset, shuffle=False, batch_size =TEST_BATCH_SIZE, num_workers = 0)
-
 
 # inference 
 def predict(test_loader):
@@ -295,4 +305,5 @@ for l in pred:
     idx = l.index(max_val)
     print(idx)
     prob.append(idx)
+
 # print(torch.cuda.memory_summary(device=None, abbreviated=False))
