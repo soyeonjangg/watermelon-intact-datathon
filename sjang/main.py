@@ -1,20 +1,24 @@
 from transformers import BertTokenizer, BertModel, BertForSequenceClassification
-
 import torch
 import pandas as pd
 import shutil
 import numpy as np
+from torch.optim.lr_scheduler import ExponentialLR
+from torchsummary import summary
+from sklearn.utils import class_weight
+from sklearn.model_selection import train_test_split
 
+# import gc
+
+# def report_gpu():
+#    print(torch.cuda.list_gpu_processes())
+#    gc.collect()
+#    torch.cuda.empty_cache()
+   
 orig_train_df = pd.read_csv("data/new_train.csv")
-test_df = pd.read_csv("data/new_test.csv")
-
-# train_df['len'] = train_df['preprocessed_transcription'].apply(lambda s : len(s))
-# train_df['len'].plot.hist(bins=100)
-# train_df.len.quantile(0.9)
 
 medical_specialty_binary_df = pd.get_dummies(orig_train_df.medical_specialty)
 orig_train_df = pd.concat([orig_train_df, medical_specialty_binary_df], axis=1)
-orig_train_df.drop(labels=['Unnamed: 0', 'labels', 'medical_specialty'], axis=1, inplace=True)
 
 target_list = [' Emergency Room Reports', ' Surgery', ' Radiology', ' Podiatry',
        ' Neurology', ' Gastroenterology', ' Orthopedic',
@@ -38,8 +42,8 @@ tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 MAX_LEN = 256
 TRAIN_BATCH_SIZE = 32
 VALID_BATCH_SIZE = 32
-EPOCHS = 2
-LEARNING_RATE = 1e-05
+EPOCHS = 4
+LEARNING_RATE =  1e-5
 
 class CustomDataset(torch.utils.data.Dataset):
     def __init__(self, df, tokenizer, max_len):
@@ -63,8 +67,12 @@ class CustomDataset(torch.utils.data.Dataset):
             'targets': torch.FloatTensor(self.targets[index])
         }
 
+# class_weights = class_weight.compute_class_weight(class_weight='balanced',  classes=np.unique(target_list), y=orig_train_df.medical_specialty)
+# weights= torch.tensor(class_weights,dtype=torch.float)
+
 train_size = 0.8
 train_df = orig_train_df.sample(frac=train_size, random_state=200)
+train_df.drop(labels=['Unnamed: 0', 'labels', 'medical_specialty'], axis=1, inplace=True)
 val_df = orig_train_df.drop(train_df.index).reset_index(drop=True)
 train_df = train_df.reset_index(drop=True)
 
@@ -81,6 +89,7 @@ else:
     device = torch.device("cpu")
     print('CPU exists.')
 
+#weights = weights.to(device)
 
 def load_ckp(checkpoint_fpath, model, optimizer):
     """
@@ -145,16 +154,19 @@ val_outputs=[]
 
 def train_model(n_epochs, training_loader, validation_loader, model, 
                 optimizer, checkpoint_path, best_model_path):
-   
+
+  # step_size: at how many multiples of epoch you decay  
+  # step_size = 1, after every 1 epoch, new_lr = lr*gamma 
+  # gamma = decaying factor
+  # scheduler = ExponentialLR(optimizer, gamma=0.1)
+
   # initialize tracker for minimum validation loss
   valid_loss_min = np.Inf
-   
- 
   for epoch in range(1, n_epochs+1):
     train_loss = 0
     valid_loss = 0
-
     model.train()
+
     print('############# Epoch {}: Training Start   #############'.format(epoch))
     for batch_idx, data in enumerate(training_loader):
         #print('yyy epoch', batch_idx)
@@ -163,14 +175,16 @@ def train_model(n_epochs, training_loader, validation_loader, model,
         token_type_ids = data['token_type_ids'].to(device, dtype = torch.long)
         targets = data['targets'].to(device, dtype = torch.float)
         outputs = model(ids, mask, token_type_ids)
-        optimizer.zero_grad()
+
         loss = loss_fn(outputs, targets)
         #if batch_idx%5000==0:
          #   print(f'Epoch: {epoch}, Training Loss:  {loss.item()}')
-        
         optimizer.zero_grad()
+
         loss.backward()
         optimizer.step()
+        # scheduler.step()    
+
         #print('before loss data in training', loss.item(), train_loss)
         train_loss = train_loss + ((1 / (batch_idx + 1)) * (loss.item() - train_loss))
         print('after loss data in training', loss.item(), train_loss)
@@ -191,6 +205,7 @@ def train_model(n_epochs, training_loader, validation_loader, model,
             token_type_ids = data['token_type_ids'].to(device, dtype = torch.long)
             targets = data['targets'].to(device, dtype = torch.float)
             outputs = model(ids, mask, token_type_ids)
+            outputs.detach()
 
             loss = loss_fn(outputs, targets)
             valid_loss = valid_loss + ((1 / (batch_idx + 1)) * (loss.item() - valid_loss))
@@ -217,7 +232,7 @@ def train_model(n_epochs, training_loader, validation_loader, model,
             'optimizer': optimizer.state_dict()
       }
         
-        # save checkpoint
+      # save checkpoint
       save_ckp(checkpoint, False, checkpoint_path, best_model_path)
         
       ## TODO: save the model if validation loss has decreased
@@ -231,16 +246,19 @@ def train_model(n_epochs, training_loader, validation_loader, model,
 
   return model
 
-ckpt_path = "data/multi-label/best_model1"
-best_model_path = "data/multi-label/best_model.pt"
-# best_model_path = "data/multi-label/best_model.pt"
-trained_model = train_model(EPOCHS, train_data_loader, val_data_loader, model, optimizer, ckpt_path, best_model_path)
+ckpt_path = "data/multi-label/curr_ckpt7"
+model_path = "data/multi-label/best_model7.pt"
+trained_model = train_model(EPOCHS, train_data_loader, val_data_loader, model, optimizer, ckpt_path, model_path)
 
-model.load_state_dict(torch.load(best_model_path)['state_dict'])
+best_model_path = 'data/multi-label/best_model1.pt'
+best_checkpoint_path = "data/multi-label/curr_ckpt1"
+
+model.load_state_dict(torch.load(best_checkpoint_path)['state_dict'])
 model.eval()
 
 TEST_BATCH_SIZE = 32
 medical_specialty_df = pd.DataFrame(columns=target_list)
+test_df = pd.read_csv("data/new_test.csv")
 test_df = pd.concat([test_df, medical_specialty_df])
 test_df.drop('Unnamed: 0', axis=1, inplace=True)
 test_df = test_df.fillna(0)
@@ -248,21 +266,33 @@ test_dataset = CustomDataset(test_df, tokenizer, MAX_LEN)
 
 test_data_loader = torch.utils.data.DataLoader(test_dataset, shuffle=False, batch_size =TEST_BATCH_SIZE, num_workers = 0)
 
-#inference 
+
+# inference 
 def predict(test_loader):
     predictions = []
-    for batch_idx, data in enumerate(test_loader):
-        #print('yyy epoch', batch_idx)
-        ids = data['input_ids'].to(device, dtype = torch.long)
-        mask = data['attention_mask'].to(device, dtype = torch.long)
-        token_type_ids = data['token_type_ids'].to(device, dtype = torch.long)
-        outputs = model(ids, mask, token_type_ids)[0]
-        predictions.append(outputs)
+    with torch.no_grad():
+        for batch_idx, data in enumerate(test_loader):
+            # print('yyy epoch', batch_idx)
+            ids = data['input_ids'].to(device, dtype = torch.long)
+            mask = data['attention_mask'].to(device, dtype = torch.long)
+            token_type_ids = data['token_type_ids'].to(device, dtype = torch.long)
+            outputs = model(ids, mask, token_type_ids)
+            predictions.extend(torch.sigmoid(outputs).cpu().detach().numpy().tolist())
+
     return predictions
 
 def flat_accuracy(preds, labels):
-    pred_flat = np.argmax(preds, axis=1).flatten()
+    pred_flat = np.argmax(preds).flatten()
     labels_flat = labels.flatten()
     return np.sum(pred_flat == labels_flat) / len(labels_flat)
-predict(test_data_loader)
-print(flat_accuracy(predict(test_data_loader), target_list))
+
+pred = predict(test_data_loader)
+
+prob = []
+for l in pred:
+    max_val = max(l)
+    print(max_val)
+    idx = l.index(max_val)
+    print(idx)
+    prob.append(idx)
+# print(torch.cuda.memory_summary(device=None, abbreviated=False))
