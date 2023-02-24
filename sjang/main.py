@@ -56,8 +56,8 @@ val_df = pd.concat([val_df, val_medical_df], axis=1)
 
 # train_size = 0.8
 # train_df = orig_train_df.sample(frac=train_size, random_state=200)
-train_df.drop(labels=['medical_specialty'], axis=1, inplace=True)
-val_df.drop(labels=['medical_specialty'], axis=1, inplace=True)
+# train_df.drop('medical_specialty', axis=1, inplace=True)
+# val_df.drop('medical_specialty', axis=1, inplace=True)
 
 # val_df = orig_train_df.drop(train_df.index).reset_index(drop=True)
 train_df = train_df.reset_index(drop=True)
