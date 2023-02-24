@@ -1,4 +1,4 @@
-from transformers import BertTokenizer, BertModel, BertForSequenceClassification
+from transformers import BertTokenizer, BertForSequenceClassification
 import torch
 import pandas as pd
 import shutil
@@ -8,18 +8,9 @@ from torchsummary import summary
 from sklearn.utils import class_weight
 from sklearn.model_selection import train_test_split
 from imblearn.over_sampling import SMOTE
-
-# import gc
-
-# def report_gpu():
-#    print(torch.cuda.list_gpu_processes())
-#    gc.collect()
-#    torch.cuda.empty_cache()
-
-orig_train_df = pd.read_csv("data/new_train.csv")
-vectorizer.fit(orig_train_df.transcription.ravel())
-X_train=vectorizer.transform(orig_train_df.transcription.ravel())
-X_train=X_train.toarray()
+from dataloader import CustomDataset
+from model import BERTClass
+from ckpoint import *
 
 target_list = [' Emergency Room Reports', ' Surgery', ' Radiology', ' Podiatry',
        ' Neurology', ' Gastroenterology', ' Orthopedic',
@@ -37,51 +28,31 @@ target_list = [' Emergency Room Reports', ' Surgery', ' Radiology', ' Podiatry',
        ' Pain Management', ' IME-QME-Work Comp etc.',
        ' Allergy / Immunology', ' Sleep Medicine',
        ' Diets and Nutritions', ' Rheumatology']
-
+new_target_list = [
+    '0', '1', '2', '3', '4', '5', '6', '7'
+]
 tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-
 MAX_LEN = 256
 TRAIN_BATCH_SIZE = 32
 VALID_BATCH_SIZE = 32
 EPOCHS = 4
 LEARNING_RATE =  1e-5
 
-class CustomDataset(torch.utils.data.Dataset):
-    def __init__(self, df, tokenizer, max_len):
-        self.df = df
-        self.tokenizer = tokenizer
-        self.max_len = max_len
-        self.transcription = self.df['transcription']
-        self.targets = self.df[target_list].values
-    def __len__(self):
-        return len(self.transcription)
+orig_train_df = pd.read_csv("./data/train.csv")
 
-    def __getitem__(self, index):
-        transcription = str(self.transcription[index])
-        transcription = " ".join(transcription.split())
+X, y = orig_train_df.transcription, orig_train_df.new_labels
 
-        inputs = self.tokenizer.encode_plus(transcription, None, add_special_tokens=True, max_length=self.max_len, padding='max_length', return_token_type_ids=True, truncation=True, return_attention_mask=True, return_tensors='pt')
-        return {
-            'input_ids': inputs['input_ids'].flatten(),
-            'attention_mask': inputs['attention_mask'].flatten(),
-            'token_type_ids': inputs['token_type_ids'].flatten(),
-            'targets': torch.FloatTensor(self.targets[index])
-        }
-
-# smote_over_sample = SMOTE(sampling_strategy='minority')
-# need to convert text data to numeric using vectorizer?
-# X, y = smote_over_sample.fit_resample(orig_train_df, labels)
-X, y = orig_train_df.transcription, orig_train_df.medical_specialty
+# 여기부터 수정 예정
 X_train, X_val, y_train, y_val = train_test_split(X, y, stratify=y, test_size=0.2, random_state=200)
 train_df = pd.concat([X_train, y_train], axis=1)
 val_df = pd.concat([X_val, y_val], axis=1)
 
-train_medical_df = pd.get_dummies(train_df.medical_specialty)
-val_medical_df = pd.get_dummies(val_df.medical_specialty)
+train_medical_df = pd.get_dummies(train_df.new_labels)
+val_medical_df = pd.get_dummies(val_df.new_labels)
 
 train_df = pd.concat([train_df, train_medical_df], axis=1)
 val_df = pd.concat([val_df, val_medical_df], axis=1)
-
+import ipdb; ipdb.set_trace()
 # class_weights = class_weight.compute_class_weight(class_weight='balanced',  classes=np.unique(target_list), y=train_df.medical_specialty)
 # weights= torch.tensor(class_weights,dtype=torch.float)
 
@@ -100,6 +71,7 @@ val_dataset = CustomDataset(val_df, tokenizer, MAX_LEN)
 train_data_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size =TRAIN_BATCH_SIZE, num_workers = 0)
 val_data_loader = torch.utils.data.DataLoader(val_dataset, shuffle=False, batch_size =VALID_BATCH_SIZE, num_workers = 0)
 
+# GPU usage
 if torch.cuda.is_available():        
     device = torch.device("cuda")
     print('GPU:', torch.cuda.get_device_name(0))
@@ -109,55 +81,6 @@ else:
 
 # weights = weights.to(device)
 
-def load_ckp(checkpoint_fpath, model, optimizer):
-    """
-    checkpoint_path: path to save checkpoint
-    model: model that we want to load checkpoint parameters into       
-    optimizer: optimizer we defined in previous training
-    """
-    # load check point
-    checkpoint = torch.load(checkpoint_fpath)
-    # initialize state_dict from checkpoint to model
-    model.load_state_dict(checkpoint['state_dict'])
-    # initialize optimizer from checkpoint to optimizer
-    optimizer.load_state_dict(checkpoint['optimizer'])
-    # initialize valid_loss_min from checkpoint to valid_loss_min
-    valid_loss_min = checkpoint['valid_loss_min']
-    # return model, optimizer, epoch value, min validation loss 
-    return model, optimizer, checkpoint['epoch'], valid_loss_min.item()
-
-def save_ckp(state, is_best, checkpoint_path, best_model_path):
-    """
-    state: checkpoint we want to save
-    is_best: is this the best checkpoint; min validation loss
-    checkpoint_path: path to save checkpoint
-    best_model_path: path to save best model
-    """
-    f_path = checkpoint_path
-    # save checkpoint data to the path given, checkpoint_path
-    torch.save(state, f_path)
-    # if it is a best model, min validation loss
-    if is_best:
-        best_fpath = best_model_path
-        # copy that checkpoint file to best path given, best_model_path
-        shutil.copyfile(f_path, best_fpath)
-     
-class BERTClass(torch.nn.Module):
-    def __init__(self):
-        super(BERTClass, self).__init__()
-        self.bert_model = BertModel.from_pretrained('bert-base-uncased', return_dict=True)
-        self.dropout = torch.nn.Dropout(0.3)
-        self.linear = torch.nn.Linear(768, 40)
-    
-    def forward(self, input_ids, attn_mask, token_type_ids):
-        output = self.bert_model(
-            input_ids, 
-            attention_mask=attn_mask, 
-            token_type_ids=token_type_ids
-        )
-        output_dropout = self.dropout(output.pooler_output)
-        output = self.linear(output_dropout)
-        return output
 
 model = BERTClass()
 model.to(device)
@@ -275,7 +198,7 @@ model.load_state_dict(torch.load(ckpt_path)['state_dict'])
 model.eval()
 
 TEST_BATCH_SIZE = 32
-medical_specialty_df = pd.DataFrame(columns=target_list)
+medical_specialty_df = pd.DataFrame(columns=new_target_list)
 test_df = pd.read_csv("data/new_test.csv")
 test_df = pd.concat([test_df, medical_specialty_df])
 test_df.drop('Unnamed: 0', axis=1, inplace=True)
