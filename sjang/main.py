@@ -192,7 +192,7 @@ trained_model = train_model(EPOCHS, train_data_loader, val_data_loader, model, o
 best_model_path = 'data/multi-label/best_model1.pt'
 best_checkpoint_path = "data/multi-label/curr_ckpt1"
 
-model.load_state_dict(torch.load(ckpt_path)['state_dict'])
+model.load_state_dict(torch.load(model_path)['state_dict'])
 model.eval()
 
 TEST_BATCH_SIZE = 32
@@ -232,5 +232,6 @@ for l in pred:
     idx = l.index(max_val)
     print(idx)
     prob.append(idx)
+
 
 # print(torch.cuda.memory_summary(device=None, abbreviated=False))
