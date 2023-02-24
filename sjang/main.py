@@ -51,7 +51,6 @@ val_medical_df = pd.get_dummies(val_df.new_labels)
 
 train_df = pd.concat([train_df, train_medical_df], axis=1)
 val_df = pd.concat([val_df, val_medical_df], axis=1)
-import ipdb; ipdb.set_trace()
 # class_weights = class_weight.compute_class_weight(class_weight='balanced',  classes=np.unique(target_list), y=train_df.medical_specialty)
 # weights= torch.tensor(class_weights,dtype=torch.float)
 
