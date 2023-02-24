@@ -28,7 +28,7 @@ target_list = [' Emergency Room Reports', ' Surgery', ' Radiology', ' Podiatry',
        ' Allergy / Immunology', ' Sleep Medicine',
        ' Diets and Nutritions', ' Rheumatology']
 new_target_list = [
-    '0', '1', '2', '3', '4', '5', '6', '7'
+    0, 1, 2, 3, 4, 5, 6, 7
 ]
 tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 MAX_LEN = 256
