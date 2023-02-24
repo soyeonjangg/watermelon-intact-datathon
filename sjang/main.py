@@ -63,8 +63,8 @@ val_df = pd.concat([val_df, val_medical_df], axis=1)
 train_df = train_df.reset_index(drop=True)
 val_df = val_df.reset_index(drop=True)
 
-train_dataset = CustomDataset(train_df, tokenizer, MAX_LEN)
-val_dataset = CustomDataset(val_df, tokenizer, MAX_LEN)
+train_dataset = CustomDataset(train_df, tokenizer, MAX_LEN, new_target_list)
+val_dataset = CustomDataset(val_df, tokenizer, MAX_LEN, new_target_list)
 
 train_data_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size =TRAIN_BATCH_SIZE, num_workers = 0)
 val_data_loader = torch.utils.data.DataLoader(val_dataset, shuffle=False, batch_size =VALID_BATCH_SIZE, num_workers = 0)
@@ -201,7 +201,7 @@ test_df = pd.read_csv("data/new_test.csv")
 test_df = pd.concat([test_df, medical_specialty_df])
 test_df.drop('Unnamed: 0', axis=1, inplace=True)
 test_df = test_df.fillna(0)
-test_dataset = CustomDataset(test_df, tokenizer, MAX_LEN)
+test_dataset = CustomDataset(test_df, tokenizer, MAX_LEN, new_target_list)
 test_data_loader = torch.utils.data.DataLoader(test_dataset, shuffle=False, batch_size =TEST_BATCH_SIZE, num_workers = 0)
 
 # inference 
