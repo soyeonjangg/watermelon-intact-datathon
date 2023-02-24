@@ -1,4 +1,5 @@
 import torch
+import shutil
 
 def load_ckp(checkpoint_fpath, model, optimizer):
     """

@@ -1,7 +1,6 @@
 from transformers import BertTokenizer, BertForSequenceClassification
 import torch
 import pandas as pd
-import shutil
 import numpy as np
 from torch.optim.lr_scheduler import ExponentialLR
 from torchsummary import summary
