@@ -7,6 +7,7 @@ conda create --name <env_name> --file requirements.txt
 ```
 
 To reproduce the model and to predict, run
+
 ```
 python extracted_data.py
 python big_main.py
