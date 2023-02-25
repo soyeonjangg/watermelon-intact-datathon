@@ -72,5 +72,3 @@ ckpt_path = "data/curr_ckpt.pt"
 model_path = "data/best_model_class.pt"
 
 trained_model = train_model(EPOCHS, train_data_loader, val_data_loader, model, optimizer, ckpt_path, model_path, device)
-
-

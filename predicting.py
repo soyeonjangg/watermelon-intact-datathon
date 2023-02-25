@@ -39,27 +39,27 @@ test_df = test_df.fillna(0)
 test_dataset = CustomDataset(test_df, tokenizer, MAX_LEN, new_target_list)
 test_data_loader = torch.utils.data.DataLoader(test_dataset, shuffle=False, batch_size =TEST_BATCH_SIZE, num_workers = 0)
 
-psudo_label_path = "./data/best_model_class.pt"
+pseudo_label_path = "./data/best_model_class.pt"
 #######
 model = BERTClass(len(new_target_list))
 model.to(device)
 
-model.load_state_dict(torch.load(psudo_label_path)['state_dict'])
+model.load_state_dict(torch.load(pseudo_label_path)['state_dict'])
 model.eval()
 # inference 
 preds = predict(model, test_data_loader, device)
 
-psudo_labels = []
+pseudo_labels = []
 for pred in preds:
-    psudo_labels.append(pred.index(max(pred)))
+    pseudo_labels.append(pred.index(max(pred)))
 test_df = test_df[['transcription']]
-test_df['psudo_labels'] = psudo_labels
+test_df['pseudo_labels'] = pseudo_labels
 
 final_result = pd.DataFrame(columns=['index', 'transcription', 'Predicted'])
 ########
 for i, label in enumerate(detail_labels):
     real_label_path = "./data/best_model_class" + str(i) + ".pt"
-    tmp_df = test_df[test_df['psudo_labels'] == i]
+    tmp_df = test_df[test_df['pseudo_labels'] == i]
     tmp_df.reset_index(inplace=True, drop=False)
     
     medical_specialty_df = pd.DataFrame(columns=label)
