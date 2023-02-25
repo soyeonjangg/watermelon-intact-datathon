@@ -9,7 +9,8 @@ conda create --name <env_name> --file requirements.txt
 To reproduce the model, run
 ```
 python extracted_data.py
-python main.py
+python big_main.py
+python small_main.py
 ```
 
 The model will be saved under `data/multi-label` directory.

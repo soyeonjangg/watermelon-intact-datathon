@@ -1,4 +1,4 @@
-from transformers import BertTokenizer, BertForSequenceClassification
+from transformers import BertTokenizer
 import torch
 import pandas as pd
 import numpy as np
