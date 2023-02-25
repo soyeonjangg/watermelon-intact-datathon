@@ -228,12 +228,9 @@ pred = predict(test_data_loader)
 prob = []
 for l in pred:
     max_val = max(l)
-    print(max_val)
     idx = l.index(max_val)
-
-    print(idx)
     prob.append(idx)
-
-
+    
 # print(torch.cuda.memory_summary(device=None, abbreviated=False))
-result = pd.DataFrame(prob, columns=['pred_label'])
+result = pd.DataFrame(prob, columns=['Predicted'])
+result.to_csv("intact_predicted.csv")
